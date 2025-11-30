@@ -134,10 +134,6 @@ client.on('message', (channel, tags, message, self) => {
   }
 });
 
-// Log de avisos de Twitch (para ver si bloquea mensajes del bot)
-client.on('notice', (channel, msgid, message) => {
-  console.log('[NOTICE]', channel, msgid, message);
-});
 
 
 
