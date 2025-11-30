@@ -132,5 +132,9 @@ client.on('message', (channel, tags, message, self) => {
     const frase = fraseAprendida();
     client.say(channel, frase);
   }
+client.on('notice', (channel, msgid, message) => {
+  console.log('[NOTICE]', channel, msgid, message);
 });
+
+
 
