@@ -9,26 +9,32 @@ const CHANNEL_NAME = 'mich_patitas0w0';                 // ej: 'jair123'
 const memoriaChat = [];
 const LIMITE_MEMORIA = 30000;
 
-// Guarda mensajes del chat, excepto los que mencionan al bot
+// Guarda mensajes del chat, con filtros
 function aprender(msg, lower, botLower) {
   if (msg.length < 2) return;
-  if (msg.startsWith('!')) return;           // no comandos (!)
-  if (lower.includes('@' + botLower)) return; // ❌ NO aprender mensajes que mencionen al bot
 
-  // ✔️ Sí guarda preguntas con '?'
+  // No aprender comandos tipo !algo
+  if (msg.startsWith('!')) return;
+
+  // No aprender mensajes que mencionen al bot (@mich_botsito)
+  if (lower.includes('@' + botLower)) return;
+
   memoriaChat.push(msg);
+
+  // Si se pasa del límite, borrar los más viejos
   if (memoriaChat.length > LIMITE_MEMORIA) {
     memoriaChat.shift();
   }
 }
 
-// Escoge una frase al azar de la memoria
+// Devuelve un mensaje al azar de lo que ya aprendió
 function fraseAprendida() {
   if (memoriaChat.length === 0) return null;
   const idx = Math.floor(Math.random() * memoriaChat.length);
   return memoriaChat[idx];
 }
 
+// Cliente de Twitch
 const client = new tmi.Client({
   identity: {
     username: BOT_USERNAME,
@@ -40,17 +46,27 @@ const client = new tmi.Client({
 
 client.connect();
 
+// Evento: cuando llega un mensaje al chat
 client.on('message', (channel, tags, message, self) => {
   if (self) return;
+
+  // Ignorar otros bots (Nightbot, StreamElements)
+  const usernameRaw = tags.username || '';
+  const username = usernameRaw.toLowerCase();
+  const botsIgnorados = ['nightbot', 'streamelements'];
+
+  if (botsIgnorados.includes(username)) {
+    return; // no aprende ni responde a estos bots
+  }
 
   const msg = message.trim();
   const lower = msg.toLowerCase();
   const botLower = BOT_USERNAME.toLowerCase();
 
-  // 👇 Aprender mensajes (menos los que mencionen al bot)
+  // Aprender del mensaje (ya filtrado)
   aprender(msg, lower, botLower);
 
-  // Si mencionan al bot → responde con algo aprendido
+  // Si mencionan al bot, responder con algo que ya aprendió
   if (lower.includes('@' + botLower)) {
     const frase = fraseAprendida();
     if (frase) client.say(channel, frase);
@@ -64,4 +80,11 @@ client.on('message', (channel, tags, message, self) => {
     const frase = fraseAprendida();
     client.say(channel, frase);
   }
+});
+
+  if (Math.random() < probHablarSolo && memoriaChat.length > 0) {
+    const frase = fraseAprendida();
+    client.say(channel, frase);
+  }
+
 });
