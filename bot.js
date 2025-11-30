@@ -8,7 +8,7 @@ const CHANNEL_NAME = process.env.CHANNEL_NAME || 'mich_patitas0w0';
 
 // Memoria del bot
 const memoriaChat = [];
-const LIMITE_MEMORIA = 50000;              // Máxima cantidad de mensajes que recuerda
+const LIMITE_MEMORIA = 2000;              // Máxima cantidad de mensajes que recuerda
 const PATH_MEMORIA = './memoria.json';    // Archivo donde guardamos la memoria
 
 // Cargar memoria desde archivo (si existe y está bien)
@@ -134,4 +134,3 @@ client.on('message', (channel, tags, message, self) => {
     client.say(channel, frase);
   }
 });
-
