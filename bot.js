@@ -11,23 +11,40 @@ const memoriaChat = [];
 const LIMITE_MEMORIA = 30000;              // Máxima cantidad de mensajes que recuerda
 const PATH_MEMORIA = './memoria.json';    // Archivo donde guardamos la memoria
 
-// Cargar memoria desde archivo (si existe)
+// Cargar memoria desde archivo (si existe y está bien)
 function cargarMemoria() {
+  if (!fs.existsSync(PATH_MEMORIA)) {
+    console.log('No hay memoria previa, empezando desde cero.');
+    return;
+  }
+
   try {
-    if (fs.existsSync(PATH_MEMORIA)) {
-      const data = fs.readFileSync(PATH_MEMORIA, 'utf8');
-      const arr = JSON.parse(data);
-      if (Array.isArray(arr)) {
-        // Nos quedamos solo con los últimos LIMITE_MEMORIA
-        const recortado = arr.slice(-LIMITE_MEMORIA);
-        memoriaChat.push(...recortado);
-        console.log(`Memoria cargada: ${memoriaChat.length} mensajes.`);
-      }
+    const data = fs.readFileSync(PATH_MEMORIA, 'utf8');
+
+    // Si el archivo está vacío o solo espacios, lo ignoramos
+    if (!data || !data.trim()) {
+      console.log('memoria.json está vacío, empezando limpio.');
+      return;
+    }
+
+    const arr = JSON.parse(data);
+
+    if (Array.isArray(arr)) {
+      const recortado = arr.slice(-LIMITE_MEMORIA);
+      memoriaChat.push(...recortado);
+      console.log(`Memoria cargada: ${memoriaChat.length} mensajes.`);
     } else {
-      console.log('No hay memoria previa, empezando desde cero.');
+      console.log('memoria.json no tiene un array válido, ignorando.');
     }
   } catch (err) {
-    console.error('Error al cargar memoria:', err);
+    console.error('Error al cargar memoria, borrando archivo dañado:', err);
+    // Si está dañado, lo borramos para empezar limpio
+    try {
+      fs.unlinkSync(PATH_MEMORIA);
+      console.log('memoria.json dañado eliminado.');
+    } catch (e) {
+      console.error('No se pudo borrar memoria.json:', e);
+    }
   }
 }
 
@@ -53,7 +70,6 @@ function aprender(msg, lower, botLower) {
   // No aprender mensajes que mencionen al bot
   if (lower.includes('@' + botLower)) return;
 
-  // Guardar mensaje en memoria
   memoriaChat.push(msg);
 
   // Borrar mensajes antiguos si nos pasamos del límite
@@ -94,7 +110,6 @@ client.on('message', (channel, tags, message, self) => {
   // IGNORAR MENSAJES DE OTROS BOTS
   const username = (tags.username || '').toLowerCase();
   const botsIgnorados = ['nightbot', 'streamelements'];
-
   if (botsIgnorados.includes(username)) return;
 
   const msg = message.trim();
@@ -111,8 +126,8 @@ client.on('message', (channel, tags, message, self) => {
     return;
   }
 
-  // Probabilidad de hablar solo (5%)
-  const probHablarSolo = 0.05;
+  // Probabilidad de hablar solo (25%)
+  const probHablarSolo = 0.25;
 
   if (Math.random() < probHablarSolo && memoriaChat.length > 0) {
     const frase = fraseAprendida();
