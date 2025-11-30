@@ -1,10 +1,9 @@
 const fs = require('fs');
 const tmi = require('tmi.js');
 
-// ⚙️ Configuración: usa variables de entorno (Railway)
-const BOT_USERNAME = process.env.BOT_USERNAME || 'mich_botsito';
-const OAUTH_TOKEN  = process.env.OAUTH_TOKEN  || 'oauth:TOKEN_AQUI';
-const CHANNEL_NAME = process.env.CHANNEL_NAME || 'mich_patitas0w0';
+const BOT_USERNAME = 'mich_botsito';        
+const OAUTH_TOKEN  = 'oauth:v7tc0ddw5lu0dp2bhigldvlmfdys6m';         
+const CHANNEL_NAME = 'mich_patitas0w0';                 
 
 // Memoria del bot
 const memoriaChat = [];
@@ -134,3 +133,4 @@ client.on('message', (channel, tags, message, self) => {
     client.say(channel, frase);
   }
 });
+
