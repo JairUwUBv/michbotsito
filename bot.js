@@ -126,8 +126,8 @@ client.on('message', (channel, tags, message, self) => {
     return;
   }
 
-  // Probabilidad de hablar solo (15%)
-  const probHablarSolo = 0.15;
+  // Probabilidad de hablar solo (25%)
+  const probHablarSolo = 0.25;
 
   if (Math.random() < probHablarSolo && memoriaChat.length > 0) {
     const frase = fraseAprendida();
