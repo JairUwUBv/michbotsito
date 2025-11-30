@@ -1,0 +1,14 @@
+{
+  "name": "michbotsito",
+  "version": "1.0.0",
+  "description": "Bot de Twitch que aprende mensajes del chat y los repite",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "tmi.js": "^1.8.5"
+  }
+}
