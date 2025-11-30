@@ -1,14 +1,15 @@
 const fs = require('fs');
 const tmi = require('tmi.js');
 
-const BOT_USERNAME = 'mich_botsito';        
-const OAUTH_TOKEN  = 'oauth:v7tc0ddw5lu0dp2bhigldvlmfdys6m';         
-const CHANNEL_NAME = 'mich_patitas0w0';                 
+// ⚙️ Configuración: usa variables de entorno (Railway) o valores por defecto
+const BOT_USERNAME = process.env.BOT_USERNAME || 'mich_botsito';
+const OAUTH_TOKEN  = process.env.OAUTH_TOKEN  || 'oauth:TOKEN_AQUI';
+const CHANNEL_NAME = process.env.CHANNEL_NAME || 'mich_patitas0w0';
 
 // Memoria del bot
 const memoriaChat = [];
-const LIMITE_MEMORIA = 30000;              // Máxima cantidad de mensajes que recuerda
-const PATH_MEMORIA = './memoria.json';    // Archivo donde guardamos la memoria
+const LIMITE_MEMORIA = 5000;           // Máxima cantidad de mensajes que recuerda
+const PATH_MEMORIA = './memoria.json'; // Archivo donde guardamos la memoria
 
 // Cargar memoria desde archivo (si existe y está bien)
 function cargarMemoria() {
@@ -37,7 +38,6 @@ function cargarMemoria() {
     }
   } catch (err) {
     console.error('Error al cargar memoria, borrando archivo dañado:', err);
-    // Si está dañado, lo borramos para empezar limpio
     try {
       fs.unlinkSync(PATH_MEMORIA);
       console.log('memoria.json dañado eliminado.');
@@ -66,7 +66,7 @@ function aprender(msg, lower, botLower) {
   // No aprender comandos tipo !comando
   if (msg.startsWith('!')) return;
 
-  // No aprender mensajes que mencionen al bot
+  // No aprender mensajes que mencionen al bot (@mich_botsito)
   if (lower.includes('@' + botLower)) return;
 
   memoriaChat.push(msg);
@@ -96,7 +96,7 @@ const client = new tmi.Client({
     username: BOT_USERNAME,
     password: OAUTH_TOKEN
   },
-  channels: [ CHANNEL_NAME ],
+  channels: [CHANNEL_NAME],
   options: { debug: true }
 });
 
@@ -125,16 +125,20 @@ client.on('message', (channel, tags, message, self) => {
     return;
   }
 
-  // Probabilidad de hablar solo (25%)
-  const probHablarSolo = 0.25;
+  // Probabilidad de hablar solo (15%)
+  const probHablarSolo = 0.15;
 
   if (Math.random() < probHablarSolo && memoriaChat.length > 0) {
     const frase = fraseAprendida();
     client.say(channel, frase);
   }
+});
+
+// Log de avisos de Twitch (para ver si bloquea mensajes del bot)
 client.on('notice', (channel, msgid, message) => {
   console.log('[NOTICE]', channel, msgid, message);
 });
+
 
 
 
