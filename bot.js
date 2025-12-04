@@ -16,11 +16,11 @@ const PATH_MEMORIA   = './memoria.json';
 // --- Memoria del bot en RAM ---
 const memoriaChat = [];
 
-// Contador de mensajes de otros usuarios
+// Contador de mensajes de otros usuarios (para hablar cada X mensajes)
 let contadorMensajes = 0;
 
-// Historial de últimos mensajes que el bot ha dicho (anti-repetición)
-let ultimosMensajesBot = []; // últimos 5 mensajes enviados
+// Últimos mensajes enviados por el bot (cooldown de repetición)
+let ultimosMensajesBot = []; // guardamos los últimos 5 mensajes que él dijo
 
 // Detectar si un mensaje contiene un enlace
 function contieneLink(texto) {
@@ -32,24 +32,21 @@ function contieneLink(texto) {
 let dbClient = null;
 let usaDB = false;
 
-// 🗃️ Inicializar conexión a la base de datos (si existe DATABASE_URL)
 function initDB() {
   if (!DATABASE_URL) {
-    console.log('DATABASE_URL no configurado, usando memoria en archivo (no persistente en Railway).');
+    console.log('DATABASE_URL no configurado, usando archivo como memoria.');
     cargarMemoriaDesdeArchivo();
     return;
   }
 
   dbClient = new Client({
     connectionString: DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false // necesario en muchos hostings
-    }
+    ssl: { rejectUnauthorized: false }
   });
 
   dbClient.connect((err) => {
     if (err) {
-      console.error('Error al conectar a la base de datos, usando archivo:', err);
+      console.error('Error al conectar a la DB. Usando archivo:', err);
       cargarMemoriaDesdeArchivo();
       return;
     }
@@ -57,7 +54,6 @@ function initDB() {
     console.log('✅ Conectado a la base de datos.');
     usaDB = true;
 
-    // Crear tabla si no existe
     const createTableSQL = `
       CREATE TABLE IF NOT EXISTS mensajes (
         id SERIAL PRIMARY KEY,
@@ -68,7 +64,7 @@ function initDB() {
 
     dbClient.query(createTableSQL, (err2) => {
       if (err2) {
-        console.error('Error al crear/verificar tabla mensajes, usando archivo:', err2);
+        console.error('Error creando/verificando tabla. Usando archivo:', err2);
         usaDB = false;
         cargarMemoriaDesdeArchivo();
         return;
@@ -80,54 +76,33 @@ function initDB() {
   });
 }
 
-// 📥 Cargar memoria desde archivo local (para desarrollo o respaldo)
 function cargarMemoriaDesdeArchivo() {
   if (!fs.existsSync(PATH_MEMORIA)) {
-    console.log('No hay memoria previa en archivo, empezando desde cero.');
+    console.log('No hay memoria previa. Empezando limpio.');
     return;
   }
 
   try {
     const data = fs.readFileSync(PATH_MEMORIA, 'utf8');
-
-    if (!data || !data.trim()) {
-      console.log('memoria.json está vacío, empezando limpio.');
-      return;
-    }
-
     const arr = JSON.parse(data);
 
     if (Array.isArray(arr)) {
-      const recortado = arr.slice(-LIMITE_MEMORIA);
-      memoriaChat.push(...recortado);
-      console.log(`Memoria (archivo) cargada: ${memoriaChat.length} mensajes.`);
-    } else {
-      console.log('memoria.json no tiene un array válido, ignorando.');
+      memoriaChat.push(...arr.slice(-LIMITE_MEMORIA));
+      console.log(`Memoria cargada desde archivo: ${memoriaChat.length} mensajes.`);
     }
   } catch (err) {
-    console.error('Error al cargar memoria desde archivo, borrando archivo dañado:', err);
-    try {
-      fs.unlinkSync(PATH_MEMORIA);
-      console.log('memoria.json dañado eliminado.');
-    } catch (e) {
-      console.error('No se pudo borrar memoria.json:', e);
-    }
+    console.error('Error leyendo memoria, eliminando archivo dañado:', err);
+    try { fs.unlinkSync(PATH_MEMORIA); } catch {}
   }
 }
 
-// 💾 Guardar memoria en archivo (solo modo local / respaldo)
 function guardarMemoriaEnArchivo() {
-  try {
-    const data = JSON.stringify(memoriaChat, null, 2);
-    fs.writeFile(PATH_MEMORIA, data, (err) => {
-      if (err) console.error('Error al guardar memoria en archivo:', err);
-    });
-  } catch (err) {
-    console.error('Error al preparar memoria para guardar en archivo:', err);
-  }
+  const data = JSON.stringify(memoriaChat, null, 2);
+  fs.writeFile(PATH_MEMORIA, data, (err) => {
+    if (err) console.error('Error guardando memoria en archivo:', err);
+  });
 }
 
-// 📤 Cargar memoria desde la base de datos
 function cargarMemoriaDesdeDB() {
   const sql = `
     SELECT texto
@@ -138,100 +113,77 @@ function cargarMemoriaDesdeDB() {
 
   dbClient.query(sql, [LIMITE_MEMORIA], (err, res) => {
     if (err) {
-      console.error('Error al cargar memoria desde la base de datos:', err);
-      // Si falla, intentamos al menos el archivo como respaldo
+      console.error('Error cargando memoria de DB:', err);
       cargarMemoriaDesdeArchivo();
       return;
     }
 
-    const filas = res.rows || [];
-    // Vienen de más nuevo a más viejo; los metemos al revés para respetar orden
-    for (let i = filas.length - 1; i >= 0; i--) {
-      memoriaChat.push(filas[i].texto);
+    for (let i = res.rows.length - 1; i >= 0; i--) {
+      memoriaChat.push(res.rows[i].texto);
     }
 
-    console.log(`Memoria (DB) cargada: ${memoriaChat.length} mensajes.`);
+    console.log(`Memoria cargada desde DB: ${memoriaChat.length} mensajes.`);
   });
 }
 
-// 🧠 Guardar un mensaje nuevo (DB o archivo)
 function guardarMensaje(msg) {
-  // Siempre guardar en RAM y recortar
   memoriaChat.push(msg);
-  while (memoriaChat.length > LIMITE_MEMORIA) {
-    memoriaChat.shift();
-  }
+  if (memoriaChat.length > LIMITE_MEMORIA) memoriaChat.shift();
 
   if (usaDB && dbClient) {
-    const sql = 'INSERT INTO mensajes (texto) VALUES ($1);';
-    dbClient.query(sql, [msg], (err) => {
-      if (err) {
-        console.error('Error al guardar mensaje en la base de datos:', err);
-      }
+    dbClient.query('INSERT INTO mensajes (texto) VALUES ($1);', [msg], (err) => {
+      if (err) console.error('Error guardando mensaje en DB:', err);
     });
   } else {
-    // Respaldo en archivo si no hay DB
     guardarMemoriaEnArchivo();
   }
 }
 
-// 🧠 Lógica de aprendizaje con tus reglas
+// 🧠 Aprender con tus reglas
 function aprender(msg, lower, botLower) {
-  // ❌ Muy cortos
-  if (msg.length < 2) return;
-
-  // ❌ Muy largos
-  if (msg.length > MAX_MSG_LENGTH) return;
-
-  // ❌ No aprender comandos tipo !comando
-  if (msg.startsWith('!')) return;
-
-  // ❌ No aprender mensajes que mencionen al bot
-  if (lower.includes('@' + botLower)) return;
-
-  // ❌ No aprender mensajes con links
-  if (contieneLink(msg)) return;
+  if (msg.length < 2) return;                 // Muy cortos
+  if (msg.length > MAX_MSG_LENGTH) return;    // Muy largos
+  if (msg.startsWith('!')) return;            // Comandos
+  if (lower.includes('@' + botLower)) return; // Menciones al bot
+  if (contieneLink(msg)) return;             // Links
 
   guardarMensaje(msg);
 }
 
-// Devuelve un mensaje random de la memoria con filtros y anti-repetición
+// 🧠 Elegir una frase evitando repetir las últimas 5 que dijo el bot
 function fraseAprendida() {
   if (memoriaChat.length === 0) return null;
 
-  // Filtrar mensajes que:
-  // - NO estén entre los últimos 5 ya dichos
-  // - NO tengan links
-  // - NO sean demasiado largos
-  const disponibles = memoriaChat.filter(msg =>
-    !ultimosMensajesBot.includes(msg) &&
+  // Mensajes válidos que NO estén entre los últimos 5 que dijo el bot
+  let disponibles = memoriaChat.filter(msg =>
     !contieneLink(msg) &&
-    msg.length <= MAX_MSG_LENGTH
+    msg.length <= MAX_MSG_LENGTH &&
+    !ultimosMensajesBot.includes(msg)
   );
 
-  // Si no hay suficientes, usar toda la memoria, igual filtrando links y longitud
-  const lista = disponibles.length > 0
-    ? disponibles
-    : memoriaChat.filter(msg =>
-        !contieneLink(msg) &&
-        msg.length <= MAX_MSG_LENGTH
-      );
+  // Si no hay opciones, relajar un poco (pero seguir evitando links y tochos)
+  if (disponibles.length === 0) {
+    disponibles = memoriaChat.filter(msg =>
+      !contieneLink(msg) &&
+      msg.length <= MAX_MSG_LENGTH
+    );
+  }
 
-  if (lista.length === 0) return null;
+  if (disponibles.length === 0) return null;
 
-  const idx = Math.floor(Math.random() * lista.length);
-  const frase = lista[idx];
+  const idx = Math.floor(Math.random() * disponibles.length);
+  const frase = disponibles[idx];
 
-  // Guardar la frase en el historial anti-repetición
+  // Guardar en el historial de últimos mensajes del bot (cooldown de 5)
   ultimosMensajesBot.push(frase);
   if (ultimosMensajesBot.length > 5) {
-    ultimosMensajesBot.shift(); // mantener tamaño máximo 5
+    ultimosMensajesBot.shift(); // solo mantenemos los 5 últimos que él dijo
   }
 
   return frase;
 }
 
-// 🧠 Inicializar memoria (DB o archivo)
+// Inicializar DB / memoria
 initDB();
 
 // Cliente del bot
@@ -240,7 +192,7 @@ const client = new tmi.Client({
     username: BOT_USERNAME,
     password: OAUTH_TOKEN
   },
-  channels: [ CHANNEL_NAME ],
+  channels: [CHANNEL_NAME],
   options: { debug: true }
 });
 
@@ -250,7 +202,7 @@ client.connect();
 client.on('message', (channel, tags, message, self) => {
   if (self) return;
 
-  // IGNORAR MENSAJES DE OTROS BOTS
+  // Ignorar otros bots
   const username = (tags.username || '').toLowerCase();
   const botsIgnorados = ['nightbot', 'streamelements', 'tangiabot'];
   if (botsIgnorados.includes(username)) return;
@@ -259,25 +211,25 @@ client.on('message', (channel, tags, message, self) => {
   const lower = msg.toLowerCase();
   const botLower = BOT_USERNAME.toLowerCase();
 
-  // Contar mensajes de usuarios (no bots, no el propio bot)
+  // Contar mensajes de usuarios
   contadorMensajes++;
 
-  // Aprender del mensaje con filtros
+  // Aprender del mensaje
   aprender(msg, lower, botLower);
 
-  // Si mencionan al bot → responder con algo aprendido
+  // Si lo mencionan → responder ya
   if (lower.includes('@' + botLower)) {
     const frase = fraseAprendida();
     if (frase) client.say(channel, frase);
     return;
   }
 
-  // 📌 Cada 15 mensajes → responder con algo aprendido
-  if (contadorMensajes >= 15) {
+  // Cada 15 mensajes de usuarios → responder con algo aprendido
+  if (contadorMensajes >= 20) {
     const frase = fraseAprendida();
     if (frase) {
       client.say(channel, frase);
     }
-    contadorMensajes = 0; // reiniciar contador
+    contadorMensajes = 0;
   }
 });
